@@ -66,15 +66,56 @@ def parse(tokens):
 
     Arguments:
         tokens (list): a list of strings representing tokens
+
+    >>> parse(['3.5'])
+    3.5
+    >>> parse(['x'])
+    'x'
+    >>> parse(['(', 'x', ')'])
+    ['x']
+    >>> parse(['(', '5', '(', 'x', '3', ')', ')'])
+    [5, ['x', 3]]
+    >>> parse(['(', '5', '(', 'x', '3', ')', 'm'])
+    Traceback (most recent call last):
+    ...
+    SyntaxError: Unclosed open parenthesis
+    >>> parse(['3.45.7'])
+    Traceback (most recent call last):
+    ...
+    SyntaxError: Malformed number input
+    >>> parse(['34.-5'])
+    Traceback (most recent call last):
+    ...
+    SyntaxError: Malformed number input
     """
-    numbers = set('0123456789')
+    numbers = set('0123456789.-')
     def parse_expression(index):
-        if (tokens[index] in numbers):
-            return int(tokens[index]), index+1
-        if (tokens[index] == '('):
-            pass
+        if (all([(val in numbers) for val in tokens[index]])): # if a number, return it
+            num_parts = tokens[index].split('.')
+            if (len(num_parts) == 1): # account for ints as well as floats
+                val = int(tokens[index])
+            elif ((len(num_parts) == 2) and (int(num_parts[1])>0)):
+                val = float(tokens[index])
+            else:
+                raise SyntaxError('Malformed number input')
+            return val, index+1
+        if (tokens[index] not in '()'): # if a variable, return it
+            return tokens[index], index+1
+        if (tokens[index] == '('): # otherwise, parse expression recursively
+            pointer = index+1
+            parse_list = []
+            # while within the expression, add each token recursively
+            while (pointer < len(tokens) and tokens[pointer] != ')'):
+                val, pointer = parse_expression(pointer)
+                parse_list.append(val)
+            if (pointer >= len(tokens)): # if the expression is unclosed, complain
+                raise SyntaxError('Unclosed open parenthesis')
+            return parse_list, pointer+1 # otherwise return the list of parsed tokens
+        raise SyntaxError('Unopened close parenthesis or uncaught error type in parser')
     # start off recursion
     parsed_expression, next_index = parse_expression(0)
+    if (next_index != len(tokens)):
+        raise SyntaxError('Unopened close parenthesis or uncaught error type in parser')
     return parsed_expression
 
 
