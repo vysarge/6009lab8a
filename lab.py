@@ -87,14 +87,16 @@ def parse(tokens):
     Traceback (most recent call last):
     ...
     SyntaxError: Malformed number input
+    >>> parse(['(', '+', '2', '(', '-', '3', '4', ')', ')'])
+    ['+', 2, ['-', 3, 4]]
     """
     numbers = set('0123456789.-')
     def parse_expression(index):
-        if (all([(val in numbers) for val in tokens[index]])): # if a number, return it
+        if (not tokens[index] == '-' and all([(val in numbers) for val in tokens[index]])): # if a number, return it
             num_parts = tokens[index].split('.')
             if (len(num_parts) == 1): # account for ints as well as floats
                 val = int(tokens[index])
-            elif ((len(num_parts) == 2) and (int(num_parts[1])>0)):
+            elif ((len(num_parts) == 2) and (len(num_parts[1]) > 0) and (int(num_parts[1])>0)):
                 val = float(tokens[index])
             else:
                 raise SyntaxError('Malformed number input')
@@ -133,8 +135,31 @@ def evaluate(tree):
     Arguments:
         tree (type varies): a fully parsed expression, as the output from the
                             parse function
+    >>> evaluate(-3.5)
+    -3.5
+    >>> evaluate(['+', 3, -4.5])
+    -1.5
     """
-    raise NotImplementedError
+    # for single inputs
+    if (not isinstance(tree, list)):
+        if (isinstance(tree, str)): # for symbols, find the associated value
+            if (tree in carlae_builtins.keys()):
+                return carlae_builtins[tree]
+            else: # if not found, raise an error
+                raise EvaluationError('Cannot evaluate: {}'.format(tree))
+        else: # otherwise it should be a number
+            return tree # so return directly
+
+    # catch possible issues? and ensure a useful error will be raised if necessary
+    if (len(tree) == 0):
+        raise EvaluationError('Empty expression encountered!')
+    
+    # if multiple values are present in this tree
+    func = evaluate(tree[0])
+    if (not callable(func)):
+        raise EvaluationError('Function expected: {}'.format(func))
+    args = [evaluate(arg) for arg in tree[1:]]
+    return func(args)
 
 
 if __name__ == '__main__':
@@ -142,5 +167,27 @@ if __name__ == '__main__':
     # run (not when this module is imported)
     pass
     # run doctests-- comment out before submitting!
-    import doctest
-    doctest.testmod()
+    # import doctest
+    # doctest.testmod()
+
+    # REPL
+    val = input("in> ")
+    while(val != 'QUIT'):
+        try:
+            tokens = tokenize(val)
+            #print(tokens)
+            parsed = parse(tokens)
+            #print(parsed)
+            outval = evaluate(parsed)
+        except EvaluationError as evalerror:
+            print(EvaluationError)
+            outval = evalerror
+        except SyntaxError as synerror:
+            print(SyntaxError)
+            outval = synerror
+        except Exception as error:
+            print("Unknown Error type")
+            outval = error
+        print("  out> {}".format(outval))        
+        val = input("in> ")
+        
