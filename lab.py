@@ -121,6 +121,12 @@ def parse(tokens):
     return parsed_expression
 
 class CarlaeEnvironment:
+    """
+    A class to hold an environment
+    self.parent is the parent environment (should also be a CarlaeEnvironment)
+    self.defs is a dictionary holding the variable and function definitions
+    May set values directly or update from a dictionary.
+    """
     def __init__(self, parent=None):
         assert parent==None or isinstance(parent, CarlaeEnvironment), \
             'Parent of a CarlaeEnvironment must also be a CarlaeEnvironment'
@@ -156,6 +162,26 @@ class CarlaeEnvironment:
         for key in defs_to_add.keys():
             self.__setitem__(key, defs_to_add[key])
 
+class CarlaeFunction:
+    """
+    This class describes a function written in Carlae.
+    Call to evaluate it on the inputs given.
+    """
+    def __init__(self, arg_names, expression, env):
+        self.arg_names = arg_names
+        self.expression = expression
+        self.env = env
+
+    def __call__(self, arg_list):
+        if (len(arg_list) != len(self.arg_names)):
+            raise EvaluationError("Incorrect number of arguments given; {} required".format(len(self.arg_names)))
+        return self.func_eval_dict({self.arg_names[i]: arg_list[i] for i in range(len(self.arg_names))})
+
+    def func_eval_dict(self, arg_dict):
+        local_env = CarlaeEnvironment(self.env)
+        local_env.update(arg_dict)
+        return evaluate(self.expression, local_env)
+
 carlae_builtins = {
     '+': sum,
     '-': lambda args: -args[0] if len(args) == 1 else (args[0] - sum(args[1:])),
@@ -163,6 +189,7 @@ carlae_builtins = {
     '/': lambda args: 1/args[0] if len(args)==1 else \
         args[0]/carlae_builtins['*'](args[1:]),
 }
+# builtin environment: should be the parent of the global environment as well.
 builtins_env = CarlaeEnvironment()
 builtins_env.update(carlae_builtins)
 
@@ -188,10 +215,6 @@ def evaluate(tree, env=None):
     if (not isinstance(tree, list)):
         if (isinstance(tree, str)): # for symbols, find the associated value
             return env[tree]
-            # if (tree in carlae_builtins.keys()):
-            #     return carlae_builtins[tree]
-            # else: # if not found, raise an error
-            #     raise EvaluationError('Cannot evaluate: {}'.format(tree))
         else: # otherwise it should be a number
             return tree # so return directly
 
@@ -199,17 +222,35 @@ def evaluate(tree, env=None):
     if (len(tree) == 0):
         raise EvaluationError('Empty expression encountered!')
 
+    # special keyword: define
     if (tree[0] == 'define'):
         if len(tree) != 3:
             raise EvaluationError('Define must be given one name and one expression')
-        val = evaluate(tree[2], env)
-        env[tree[1]] = val
+
+        nameparsed = tree[1]
+        funcparsed = tree[2]
+        if (isinstance(tree[1], list)): # if in the concise form
+            nameparsed = tree[1][0] # convert it to the lambda form for evaluation
+            funcparsed = ['lambda', tree[1][1:], tree[2]]
+        val = evaluate(funcparsed, env)
+        env[nameparsed] = val
         return val
+
+    # special keyword: lambda
+    if (tree[0] == 'lambda'):
+        if (len(tree) != 3):
+            raise EvaluationError('Lambda must be given one set of arguments and one expression')
+        func = CarlaeFunction(tree[1], tree[2], env)
+        return func
     
-    # if multiple values are present in this tree
+    # otherwise, for S-expressions
+    # this should be all that is left after evaluating single inputs and special keywords
     func = evaluate(tree[0], env)
+
+    # check functions
     if (not callable(func)):
         raise EvaluationError('Function expected: {}'.format(func))
+    # and evaluate
     args = [evaluate(arg, env) for arg in tree[1:]]
     return func(args)
 
@@ -233,16 +274,24 @@ if __name__ == '__main__':
     # doctest.testmod()
 
     #print(carlae_builtins['/']([1, 2, 3, 4, 5]))
+    # env = None
+    # outval, env = result_and_env(parse(tokenize("(define addN (lambda (n) (lambda (i) (+ i n))))")), env)
+    # outval, env = result_and_env(parse(tokenize("(define add7 (addN 7))")), env)
+    # outval, env = result_and_env(parse(tokenize("(add7 2)")), env)
+    # outval, env = result_and_env(parse(tokenize("(add7 ((addN 3) ((addN 19) 8)))")), env)
+    
 
     # REPL
     val = input("in> ")
+    env = None
     while(val != 'QUIT'):
+        # tokens = tokenize(val)
+        # parsed = parse(tokens)
+        # outval, env = result_and_env(parsed, env)
         try:
             tokens = tokenize(val)
-            #print(tokens)
             parsed = parse(tokens)
-            #print(parsed)
-            outval = evaluate(parsed)
+            outval, env = result_and_env(parsed, env)
         except EvaluationError as evalerror:
             print(EvaluationError)
             outval = evalerror
